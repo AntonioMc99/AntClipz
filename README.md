@@ -12,8 +12,8 @@ and (after manual review) posts them to X and TikTok. Original streamers are alw
 - [x] Phase 1: clip finder (`find_clips.py`) - tested on Windows, works
 - [x] Phase 2: download (`download_clip.py`) - tested on Windows, works
 - [x] Phase 3: edit (`edit_clip.py`) - split layout + captions, tested on Windows, works
-- [ ] Phase 4: review in Google Drive (`send_to_review.py`) - code written, needs a test on your PC
-- [ ] Phase 5a: post to X
+- [x] Phase 4: review in Google Drive (`send_to_review.py`) - tested, works
+- [ ] Phase 5a: post to X (`post_to_x.py`) - code written, needs X keys + a real test
 - [ ] Phase 5b: TikTok (manual uploads until the API app passes audit)
 
 ## First-time setup (Windows)
@@ -42,3 +42,10 @@ Only clips in `2 - approved` will ever be posted.
 
 ## All-in-one
 `.\make-clip.bat 3` = download + edit + send to review for clip #3 (run `find-clips.bat` first).
+
+## Run Phase 5a (post to X)
+1. Put your 4 X keys in `.env` (`X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`).
+2. Approve a clip on your phone (move it to `2 - approved`).
+3. Run `.\post-to-x.bat`. It shows the caption and only posts if you type `YES`.
+Posted clips move to `4 - posted` and are logged in `data\posted_log.json`.
+Captions with links are blocked by default because X charges more for posts with links.

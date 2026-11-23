@@ -12,6 +12,7 @@ Run it with:
 """
 
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -26,14 +27,20 @@ EDITED_DIR = Path("data") / "edited"
 
 
 def draft_caption(card: dict) -> str:
-    """The text that will be posted with the clip. Always credits the streamer."""
+    """
+    The text that will be posted with the clip. Always credits the streamer.
+    No links on purpose: X charges much more for posts that contain a link.
+    The video itself already shows "twitch.tv/<streamer>" at the top.
+    """
     streamer = card["streamer"]
     title = card["title"].strip()
+    handle = os.getenv("STREAMER_X_HANDLE", "").strip().lstrip("@")
+    credit = f"@{handle}" if handle else streamer
     tag = "#" + "".join(ch for ch in streamer if ch.isalnum())
     return (
         f"{title}\n"
         f"\n"
-        f"🎥 Credit: {streamer} on Twitch - {card['streamer_url'].replace('https://', '')}\n"
+        f"🎥 Credit: {credit} (live on Twitch)\n"
         f"{tag} #twitch #clips"
     )
 
