@@ -10,8 +10,8 @@ and (after manual review) posts them to X and TikTok. Original streamers are alw
 - [x] Twitch Client Secret reset
 - [x] Whisper choice: free, runs on your PC (faster-whisper)
 - [x] Phase 1: clip finder (`find_clips.py`) - tested on Windows, works
-- [ ] Phase 2: download (`download_clip.py`) - code written, needs a test on your PC
-- [ ] Phase 3: edit (`edit_clip.py`) - code written, needs a test on your PC
+- [x] Phase 2: download (`download_clip.py`) - tested on Windows, works
+- [x] Phase 3: edit (`edit_clip.py`) - split layout + captions, tested on Windows, works
 - [ ] Phase 4: review folder (approve from phone)
 - [ ] Phase 5a: post to X
 - [ ] Phase 5b: TikTok (manual uploads until the API app passes audit)
