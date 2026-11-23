@@ -9,3 +9,6 @@ __pycache__/
 # Generated data (clip lists, downloaded videos, finished clips)
 data/*
 !data/.gitkeep
+
+# Downloaded AI models (fetched automatically on first run)
+antclipz/models/

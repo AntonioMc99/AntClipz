@@ -108,9 +108,13 @@ def main() -> int:
     # 1. Face + crop
     info = get_video_info(str(video))
     print(f"[1/4] Finding the face in {info['width']}x{info['height']} video...")
-    face = find_face_center(str(video))
+    face, detector, hits, checked = find_face_center(str(video))
     crop = vertical_crop_box(info["width"], info["height"], face)
-    print("      Face found, centering on it." if face else "      No face found, using the center of the screen.")
+    print(f"      {detector} detector saw a face in {hits} of {checked} frames.")
+    if face:
+        print(f"      Centering on the face at x={face[0]:.0f}, y={face[1]:.0f}.")
+    else:
+        print("      Not enough faces found, using the center of the screen.")
 
     # 2. Transcribe
     print(f"[2/4] Transcribing speech with Whisper ('{model_name}' model)...")

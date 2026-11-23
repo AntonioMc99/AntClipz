@@ -9,9 +9,21 @@ Captions: turn speech into text with Whisper, then draw the text as images.
   the right times. Drawing them ourselves works on every ffmpeg build.
 """
 
+import os
+import subprocess
+import warnings
 from pathlib import Path
 
+import imageio_ffmpeg
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+
+# Hide harmless Windows/Hugging Face warnings about symlinks and tokens.
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+warnings.filterwarnings("ignore", module="huggingface_hub")
+
+WHISPER_SAMPLE_RATE = 16000
 
 FONT_CANDIDATES = [
     r"C:\Windows\Fonts\arialbd.ttf",                          # Windows: Arial Bold
@@ -32,13 +44,33 @@ def load_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default(size=size)
 
 
+def load_audio(video_path: str) -> np.ndarray:
+    """
+    Pull the audio out of the video as 16 kHz mono numbers (what Whisper expects),
+    using our bundled ffmpeg. Returns an empty array if the clip has no audio.
+    """
+    cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-loglevel", "error",
+           "-i", video_path, "-vn", "-ac", "1", "-ar", str(WHISPER_SAMPLE_RATE),
+           "-f", "s16le", "-"]
+    result = subprocess.run(cmd, capture_output=True)
+    if result.returncode != 0:
+        return np.zeros(0, dtype=np.float32)
+    return np.frombuffer(result.stdout, dtype=np.int16).astype(np.float32) / 32768.0
+
+
 def transcribe_words(video_path: str, model_name: str = "base", language: str | None = "en") -> list[dict]:
     """Return every spoken word with its start/end time in seconds."""
+    audio = load_audio(video_path)
+    if audio.size < WHISPER_SAMPLE_RATE // 2:   # less than half a second of audio
+        return []
+
     from faster_whisper import WhisperModel  # imported here because it is slow to load
+    from huggingface_hub.utils import logging as hf_logging
+    hf_logging.set_verbosity_error()
 
     model = WhisperModel(model_name, device="cpu", compute_type="int8")
     segments, _info = model.transcribe(
-        video_path,
+        audio,
         language=language or None,
         word_timestamps=True,
         vad_filter=True,   # skip silent parts
