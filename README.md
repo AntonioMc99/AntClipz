@@ -16,8 +16,12 @@ and (after manual review) posts them to X and TikTok. Original streamers are alw
 - [ ] Phase 5a: post to X
 - [ ] Phase 5b: TikTok (manual uploads until the API app passes audit)
 
-## Run Phase 1 (Windows PowerShell)
-```powershell
-.venv\Scripts\Activate.ps1
-python find_clips.py
-```
+## First-time setup (Windows)
+1. On GitHub, switch to branch `claude/relaxed-curie-z57h2j`, click **Code -> Download ZIP**, and unzip it into Documents.
+2. Open the unzipped folder, click the address bar, type `powershell`, and press Enter.
+3. Run: `powershell -ExecutionPolicy Bypass -File setup.ps1`
+   (If it installs Python, open a new PowerShell window in the folder and run it again.)
+4. Paste your Twitch keys into Notepad when it opens, then save.
+
+## Run Phase 1
+Double-click `find-clips.bat`.
