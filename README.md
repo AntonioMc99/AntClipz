@@ -7,11 +7,11 @@ and (after manual review) posts them to X and TikTok. Original streamers are alw
 - [x] Language: Python
 - [x] OS: Windows (ASUS PC)
 - [x] Twitch developer app created
-- [ ] Twitch Client Secret reset (old one was exposed)
-- [ ] Setup plan PDF shared (needed before Phase 3)
+- [x] Twitch Client Secret reset
+- [x] Whisper choice: free, runs on your PC (faster-whisper)
 - [x] Phase 1: clip finder (`find_clips.py`) - tested on Windows, works
 - [ ] Phase 2: download (`download_clip.py`) - code written, needs a test on your PC
-- [ ] Phase 3: edit (vertical 9:16 crop + Whisper captions)
+- [ ] Phase 3: edit (`edit_clip.py`) - code written, needs a test on your PC
 - [ ] Phase 4: review folder (approve from phone)
 - [ ] Phase 5a: post to X
 - [ ] Phase 5b: TikTok (manual uploads until the API app passes audit)
@@ -29,3 +29,7 @@ Double-click `find-clips.bat`.
 ## Run Phase 2
 Double-click `download-clip.bat` to download the #1 clip, or in PowerShell: `.\download-clip.bat 3` for clip #3.
 Videos are saved in `data\downloads\`.
+
+## Run Phase 3
+Double-click `edit-clip.bat` to edit the #1 clip (or `.\edit-clip.bat 3`). The clip must be downloaded first.
+Finished vertical videos are saved in `data\edited\`.
