@@ -9,8 +9,8 @@ and (after manual review) posts them to X and TikTok. Original streamers are alw
 - [x] Twitch developer app created
 - [ ] Twitch Client Secret reset (old one was exposed)
 - [ ] Setup plan PDF shared (needed before Phase 3)
-- [ ] Phase 1: clip finder (`find_clips.py`) - code written, needs a test on your PC
-- [ ] Phase 2: download (yt-dlp)
+- [x] Phase 1: clip finder (`find_clips.py`) - tested on Windows, works
+- [ ] Phase 2: download (`download_clip.py`) - code written, needs a test on your PC
 - [ ] Phase 3: edit (vertical 9:16 crop + Whisper captions)
 - [ ] Phase 4: review folder (approve from phone)
 - [ ] Phase 5a: post to X
@@ -25,3 +25,7 @@ and (after manual review) posts them to X and TikTok. Original streamers are alw
 
 ## Run Phase 1
 Double-click `find-clips.bat`.
+
+## Run Phase 2
+Double-click `download-clip.bat` to download the #1 clip, or in PowerShell: `.\download-clip.bat 3` for clip #3.
+Videos are saved in `data\downloads\`.
