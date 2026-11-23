@@ -86,37 +86,90 @@ def _make_detector():
     return "Haar", detect_haar
 
 
-def find_face_center(video_path: str) -> tuple[tuple[float, float] | None, str, int, int]:
+def find_face(video_path: str) -> dict:
     """
-    Returns (face_xy or None, detector name, frames with a face, frames checked).
-    face_xy is the (x, y) pixel position of the streamer's face.
+    Look for the streamer's face. Returns a dict:
+      center   -> (x, y) pixel position of the face, or None if not found
+      size     -> (width, height) of the face box in pixels, or None
+      detector -> "YuNet" or "Haar"
+      hits / checked -> frames with a face / frames looked at
     """
     name, detect = _make_detector()
+    result = {"center": None, "size": None, "detector": name, "hits": 0, "checked": 0}
     cap = cv2.VideoCapture(video_path)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     if total <= 0:
         cap.release()
-        return None, name, 0, 0
+        return result
 
-    xs, ys, checked = [], [], 0
+    xs, ys, ws, hs = [], [], [], []
     step = max(total // SAMPLE_FRAMES, 1)
     for frame_no in range(0, total, step):
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
         ok, frame = cap.read()
         if not ok:
             continue
-        checked += 1
+        result["checked"] += 1
         faces = detect(frame)
         if not faces:
             continue
         x, y, w, h = faces[0]
         xs.append(x + w / 2)
         ys.append(y + h / 2)
+        ws.append(w)
+        hs.append(h)
     cap.release()
 
-    if len(xs) < MIN_DETECTIONS:
-        return None, name, len(xs), checked
-    return (statistics.median(xs), statistics.median(ys)), name, len(xs), checked
+    result["hits"] = len(xs)
+    if len(xs) >= MIN_DETECTIONS:
+        result["center"] = (statistics.median(xs), statistics.median(ys))
+        result["size"] = (statistics.median(ws), statistics.median(hs))
+    return result
+
+
+def _even(n: float) -> int:
+    return int(n) // 2 * 2
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    return min(max(value, low), high)
+
+
+def split_layout_boxes(width: int, height: int, face_center: tuple[float, float],
+                       face_size: tuple[float, float], top_aspect: float,
+                       bottom_aspect: float) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
+    """
+    For "game + small facecam" streams. Returns two crop boxes (w, h, x, y):
+      cam  -> a box around the face (guessing the facecam area), for the TOP panel
+      game -> a tall slice of the gameplay, for the BOTTOM panel
+    aspect = width / height of each output panel.
+    """
+    fx, fy = face_center
+    face_w = face_size[0]
+
+    # Facecam guess: about 5.5 face-widths wide, shaped like the top panel.
+    cam_w = _even(_clamp(face_w * 5.5, 320, width))
+    cam_h = _even(min(cam_w / top_aspect, height))
+    cam_w = _even(cam_h * top_aspect)
+    cam_x = _even(_clamp(fx - cam_w / 2, 0, width - cam_w))
+    cam_y = _even(_clamp(fy - cam_h / 2, 0, height - cam_h))
+
+    # Gameplay: full height, as wide as the bottom panel shape allows.
+    game_h = _even(height)
+    game_w = _even(min(game_h * bottom_aspect, width))
+    # Try centered, right of the facecam, and left of it; pick the one that
+    # overlaps the facecam least (so Kai doesn't show up twice). Ties -> centered.
+    candidates = [
+        _clamp(width / 2 - game_w / 2, 0, width - game_w),
+        _clamp(cam_x + cam_w, 0, width - game_w),
+        _clamp(cam_x - game_w, 0, width - game_w),
+    ]
+
+    def overlap(gx: float) -> float:
+        return max(0.0, min(gx + game_w, cam_x + cam_w) - max(gx, cam_x))
+
+    game_x = _even(min(candidates, key=overlap))
+    return (cam_w, cam_h, cam_x, cam_y), (game_w, game_h, game_x, 0)
 
 
 def vertical_crop_box(width: int, height: int, face: tuple[float, float] | None) -> tuple[int, int, int, int]:

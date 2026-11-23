@@ -74,6 +74,7 @@ def transcribe_words(video_path: str, model_name: str = "base", language: str | 
         language=language or None,
         word_timestamps=True,
         vad_filter=True,   # skip silent parts
+        condition_on_previous_text=False,  # stops Whisper repeating/inventing lines in noisy audio
     )
     words = []
     for segment in segments:

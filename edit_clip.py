@@ -3,7 +3,9 @@ PHASE 3 - Clip editor.
 
 Takes a downloaded clip and makes a vertical 9:16 (1080x1920) video for
 TikTok / Reels / Shorts / X:
-  1. Finds the streamer's face and crops around it.
+  1. Finds the streamer's face and picks a layout:
+       - "split": facecam on top, gameplay below (for game streams with a small facecam)
+       - "crop":  one tall slice centered on the face (for IRL / full-camera streams)
   2. Transcribes the speech with Whisper (free, runs on your PC).
   3. Burns big captions onto the video.
   4. Adds a credit line at the top (e.g. "twitch.tv/kaicenat").
@@ -26,15 +28,16 @@ import imageio_ffmpeg
 from dotenv import load_dotenv
 
 from antclipz.captions import group_words, render_text_png, transcribe_words
-from antclipz.face_crop import find_face_center, get_video_info, vertical_crop_box
+from antclipz.face_crop import find_face, get_video_info, split_layout_boxes, vertical_crop_box
 
 CLIPS_FILE = Path("data") / "clips_found.json"
 DOWNLOAD_DIR = Path("data") / "downloads"
 EDITED_DIR = Path("data") / "edited"
 
 OUT_W, OUT_H = 1080, 1920
-CAPTION_Y = int(OUT_H * 0.68)      # captions sit in the lower-middle (clear of app buttons)
-CREDIT_Y = 140                     # credit line near the top
+TOP_H = 608                        # split layout: facecam panel height (16:9 at 1080 wide)
+BOTTOM_H = OUT_H - TOP_H           # split layout: gameplay panel height
+SMALL_FACE_RATIO = 0.08            # face narrower than 8% of the frame = small facecam -> split
 
 
 def pick_clip(rank: int) -> dict:
@@ -45,17 +48,38 @@ def pick_clip(rank: int) -> dict:
     return clip
 
 
-def build_ffmpeg_command(video: Path, output: Path, crop: tuple[int, int, int, int],
-                         credit_png: Path, captions: list[dict], max_seconds: float) -> list[str]:
-    crop_w, crop_h, x, y = crop
+def choose_layout(setting: str, face: dict, width: int) -> str:
+    if setting in ("split", "crop"):
+        return setting if (setting == "crop" or face["center"]) else "crop"
+    # auto
+    if face["center"] and face["size"][0] / width < SMALL_FACE_RATIO:
+        return "split"
+    return "crop"
+
+
+def base_video_filter(layout: str, info: dict, face: dict) -> str:
+    """The ffmpeg filter that builds the 1080x1920 picture, ending in label [v0]."""
+    w, h = info["width"], info["height"]
+    if layout == "split":
+        (cw, ch, cx, cy), (gw, gh, gx, gy) = split_layout_boxes(
+            w, h, face["center"], face["size"], OUT_W / TOP_H, OUT_W / BOTTOM_H)
+        return (f"[0:v]split=2[cam][game];"
+                f"[cam]crop={cw}:{ch}:{cx}:{cy},scale={OUT_W}:{TOP_H},setsar=1[top];"
+                f"[game]crop={gw}:{gh}:{gx}:{gy},scale={OUT_W}:{BOTTOM_H},setsar=1[bottom];"
+                f"[top][bottom]vstack=inputs=2[v0]")
+    cw, ch, cx, cy = vertical_crop_box(w, h, face["center"])
+    return f"[0:v]crop={cw}:{ch}:{cx}:{cy},scale={OUT_W}:{OUT_H},setsar=1[v0]"
+
+
+def build_ffmpeg_command(video: Path, output: Path, base_filter: str, credit_png: Path,
+                         credit_y: int, captions: list[dict], max_seconds: float) -> list[str]:
     cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
            "-i", str(video), "-i", str(credit_png)]
     for cap in captions:
         cmd += ["-i", str(cap["png"])]
 
-    # Filter chain: crop -> scale to 1080x1920 -> credit -> each caption at its time.
-    parts = [f"[0:v]crop={crop_w}:{crop_h}:{x}:{y},scale={OUT_W}:{OUT_H},setsar=1[v0]",
-             f"[v0][1:v]overlay=0:{CREDIT_Y}[v1]"]
+    # Filter chain: layout -> credit -> each caption shown only during its time.
+    parts = [base_filter, f"[v0][1:v]overlay=0:{credit_y}[v1]"]
     last = "v1"
     for i, cap in enumerate(captions):
         out_label = f"c{i}"
@@ -77,9 +101,10 @@ def build_ffmpeg_command(video: Path, output: Path, crop: tuple[int, int, int, i
 
 def main() -> int:
     load_dotenv()
-    model_name = os.getenv("WHISPER_MODEL", "base").strip()
+    model_name = os.getenv("WHISPER_MODEL", "small").strip()
     language = os.getenv("WHISPER_LANGUAGE", "en").strip()
     max_seconds = float(os.getenv("MAX_CLIP_SECONDS", "60"))
+    layout_setting = os.getenv("LAYOUT", "auto").strip().lower()
 
     if not CLIPS_FILE.exists():
         print("ERROR: data/clips_found.json not found. Run find-clips.bat first.")
@@ -105,38 +130,43 @@ def main() -> int:
 
     print(f"Editing clip #{rank}: {clip['title']}")
 
-    # 1. Face + crop
+    # 1. Face + layout
     info = get_video_info(str(video))
     print(f"[1/4] Finding the face in {info['width']}x{info['height']} video...")
-    face, detector, hits, checked = find_face_center(str(video))
-    crop = vertical_crop_box(info["width"], info["height"], face)
-    print(f"      {detector} detector saw a face in {hits} of {checked} frames.")
-    if face:
-        print(f"      Centering on the face at x={face[0]:.0f}, y={face[1]:.0f}.")
+    face = find_face(str(video))
+    print(f"      {face['detector']} detector saw a face in {face['hits']} of {face['checked']} frames.")
+    layout = choose_layout(layout_setting, face, info["width"])
+    if layout == "split":
+        print("      Layout: SPLIT (facecam on top, gameplay below).")
+    elif face["center"]:
+        print("      Layout: CROP (one tall slice centered on the face).")
     else:
-        print("      Not enough faces found, using the center of the screen.")
+        print("      Layout: CROP (no face found, using the center of the screen).")
 
     # 2. Transcribe
     print(f"[2/4] Transcribing speech with Whisper ('{model_name}' model)...")
-    print("      (The first time, this downloads the model, about 150 MB. Later runs are faster.)")
+    print("      (The first time with a new model it downloads it first. Later runs are faster.)")
     words = transcribe_words(str(video), model_name, language or None)
     captions = [c for c in group_words(words) if c["start"] < max_seconds]
     transcript = " ".join(w["text"] for w in words)
-    print(f"      Heard: {transcript[:120] + ('...' if len(transcript) > 120 else '') or '(no speech)'}")
+    print(f"      Heard: {(transcript[:150] + ('...' if len(transcript) > 150 else '')) or '(no speech)'}")
 
     # 3. Draw captions + credit as images
     print(f"[3/4] Drawing {len(captions)} captions...")
+    caption_center_y = TOP_H if layout == "split" else int(OUT_H * 0.68)
     for i, cap in enumerate(captions):
         cap["png"] = work_dir / f"cap_{i:03d}.png"
         _, h = render_text_png(cap["text"], cap["png"], OUT_W, font_size=86, stroke=7, max_text_width=940)
-        cap["y"] = CAPTION_Y - h // 2
+        cap["y"] = caption_center_y - h // 2
     credit_text = clip["streamer_url"].replace("https://", "")
     credit_png = work_dir / "credit.png"
     render_text_png(credit_text, credit_png, OUT_W, font_size=46, stroke=4, max_text_width=1000)
+    credit_y = 30 if layout == "split" else 140
 
     # 4. Render with ffmpeg
     print("[4/4] Rendering the vertical video with ffmpeg...")
-    cmd = build_ffmpeg_command(video, output, crop, credit_png, captions, max_seconds)
+    cmd = build_ffmpeg_command(video, output, base_video_filter(layout, info, face),
+                               credit_png, credit_y, captions, max_seconds)
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         print("\nERROR: ffmpeg failed:\n" + result.stderr[-2000:])
@@ -146,9 +176,10 @@ def main() -> int:
     card = dict(clip)
     card.update({
         "edited_file": output.name,
+        "layout": layout,
         "transcript": transcript,
         "captions": [{k: c[k] for k in ("text", "start", "end")} for c in captions],
-        "face_found": face is not None,
+        "face_found": face["center"] is not None,
     })
     (EDITED_DIR / f"{clip['id']}.json").write_text(json.dumps(card, indent=2, ensure_ascii=False), encoding="utf-8")
     shutil.rmtree(work_dir, ignore_errors=True)
